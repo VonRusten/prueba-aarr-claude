@@ -1,6 +1,6 @@
 import React, { useMemo, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import useWeddingStore from '../store/useWeddingStore.js'
 
@@ -47,14 +47,15 @@ function RoomWalls({ width, depth }) {
   )
 }
 
-function Chair({ position, occupied }) {
+function Chair({ position, occupied, guestName, familyColor }) {
   const color = occupied ? '#e8c5a0' : '#f5f0eb'
+  const firstName = guestName ? guestName.split(' ')[0].substring(0, 9) : ''
   return (
     <group position={position}>
       {/* Seat */}
       <mesh position={[0, 0.25, 0]} castShadow>
         <cylinderGeometry args={[0.18, 0.18, 0.06, 8]} />
-        <meshStandardMaterial color={color} roughness={0.7} />
+        <meshStandardMaterial color={occupied ? (familyColor || '#e8c5a0') : '#f5f0eb'} roughness={0.7} />
       </mesh>
       {/* Back */}
       <mesh position={[0, 0.5, -0.12]}>
@@ -68,26 +69,49 @@ function Chair({ position, occupied }) {
           <meshStandardMaterial color="#8b6914" roughness={0.6} />
         </mesh>
       ))}
+      {/* Guest name label */}
+      {occupied && firstName && (
+        <Html position={[0, 1.1, 0]} center distanceFactor={6} zIndexRange={[0, 10]}>
+          <div style={{
+            background: familyColor || '#fff',
+            border: '1px solid rgba(0,0,0,0.2)',
+            borderRadius: 4,
+            padding: '1px 5px',
+            fontSize: 9,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            color: '#1a1a1a',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+            pointerEvents: 'none',
+            fontFamily: 'Inter, system-ui, sans-serif',
+          }}>
+            {firstName}
+          </div>
+        </Html>
+      )}
     </group>
   )
 }
 
-function RoundTable3D({ table, assignedCount, position }) {
+function RoundTable3D({ table, tableGuests, families, position }) {
   const radius = 0.55
   const tableH = 0.75
   const numChairs = table.capacity
+  const getFamilyColor = (fid) => (families.find(f => f.id === fid) || {}).color
   const chairs = []
   for (let i = 0; i < numChairs; i++) {
     const angle = (i / numChairs) * Math.PI * 2
     const dist = radius + 0.35
     const cx = Math.cos(angle) * dist
     const cz = Math.sin(angle) * dist
-    const occupied = i < assignedCount
+    const guest = tableGuests[i]
     chairs.push(
       <Chair
         key={i}
         position={[cx, 0, cz]}
-        occupied={occupied}
+        occupied={!!guest}
+        guestName={guest ? guest.name : null}
+        familyColor={guest ? getFamilyColor(guest.familyId) : null}
       />
     )
   }
@@ -114,37 +138,35 @@ function RoundTable3D({ table, assignedCount, position }) {
   )
 }
 
-function RectTable3D({ table, assignedCount, position }) {
+function RectTable3D({ table, tableGuests, families, position }) {
   const tw = 1.4
   const td = 0.8
   const tableH = 0.75
   const numChairs = table.capacity
+  const getFamilyColor = (fid) => (families.find(f => f.id === fid) || {}).color
   const chairs = []
 
-  // Distribute chairs around the rect table
   const topCount = Math.ceil(numChairs / 2)
   const bottomCount = numChairs - topCount
   let chairIdx = 0
 
   for (let i = 0; i < topCount; i++) {
     const cx = -tw / 2 + (tw / (topCount)) * (i + 0.5)
+    const guest = tableGuests[chairIdx]
     chairs.push(
-      <Chair
-        key={`top-${i}`}
-        position={[cx, 0, -(td / 2 + 0.35)]}
-        occupied={chairIdx < assignedCount}
-      />
+      <Chair key={`top-${i}`} position={[cx, 0, -(td / 2 + 0.35)]}
+        occupied={!!guest} guestName={guest ? guest.name : null}
+        familyColor={guest ? getFamilyColor(guest.familyId) : null} />
     )
     chairIdx++
   }
   for (let i = 0; i < bottomCount; i++) {
     const cx = -tw / 2 + (tw / (bottomCount)) * (i + 0.5)
+    const guest = tableGuests[chairIdx]
     chairs.push(
-      <Chair
-        key={`bot-${i}`}
-        position={[cx, 0, td / 2 + 0.35]}
-        occupied={chairIdx < assignedCount}
-      />
+      <Chair key={`bot-${i}`} position={[cx, 0, td / 2 + 0.35]}
+        occupied={!!guest} guestName={guest ? guest.name : null}
+        familyColor={guest ? getFamilyColor(guest.familyId) : null} />
     )
     chairIdx++
   }
@@ -169,33 +191,37 @@ function RectTable3D({ table, assignedCount, position }) {
   )
 }
 
-function OvalTable3D({ table, assignedCount, position }) {
-  return <RoundTable3D table={{ ...table, shape: 'round' }} assignedCount={assignedCount} position={position} />
+function OvalTable3D({ table, tableGuests, families, position }) {
+  return <RoundTable3D table={{ ...table, shape: 'round' }} tableGuests={tableGuests} families={families} position={position} />
 }
 
-function SquareTable3D({ table, assignedCount, position }) {
+function SquareTable3D({ table, tableGuests, families, position }) {
   const size = 0.85
   const tableH = 0.75
   const numChairs = table.capacity
+  const getFamilyColor = (fid) => (families.find(f => f.id === fid) || {}).color
   const chairs = []
   const perSide = Math.ceil(numChairs / 4)
   let idx = 0
 
   const sides = [
-    { axis: 'x', sign: -1, dir: 'z' },
-    { axis: 'x', sign: 1, dir: 'z' },
-    { axis: 'z', sign: -1, dir: 'x' },
-    { axis: 'z', sign: 1, dir: 'x' },
+    { axis: 'x', sign: -1 },
+    { axis: 'x', sign: 1 },
+    { axis: 'z', sign: -1 },
+    { axis: 'z', sign: 1 },
   ]
 
-  sides.forEach(({ axis, sign, dir }) => {
+  sides.forEach(({ axis, sign }) => {
     const count = Math.min(perSide, numChairs - idx)
     for (let i = 0; i < count; i++) {
       const off = -size / 2 + (size / count) * (i + 0.5)
       const pos = axis === 'x'
         ? [sign * (size / 2 + 0.35), 0, off]
         : [off, 0, sign * (size / 2 + 0.35)]
-      chairs.push(<Chair key={`${axis}${sign}${i}`} position={pos} occupied={idx < assignedCount} />)
+      const guest = tableGuests[idx]
+      chairs.push(<Chair key={`${axis}${sign}${i}`} position={pos}
+        occupied={!!guest} guestName={guest ? guest.name : null}
+        familyColor={guest ? getFamilyColor(guest.familyId) : null} />)
       idx++
     }
   })
@@ -218,18 +244,18 @@ function SquareTable3D({ table, assignedCount, position }) {
   )
 }
 
-function Table3D({ table, assignedCount, roomWidth, roomHeight }) {
-  // Convert 2D SVG coords to 3D coords
+function Table3D({ table, tableGuests, families, roomWidth, roomHeight }) {
   const x = (table.x - roomWidth / 2) * ROOM_SCALE
   const z = (table.y - roomHeight / 2) * ROOM_SCALE
   const position = [x, 0, z]
+  const props = { table, tableGuests, families, position }
 
   switch (table.shape) {
-    case 'round': return <RoundTable3D table={table} assignedCount={assignedCount} position={position} />
-    case 'rect': return <RectTable3D table={table} assignedCount={assignedCount} position={position} />
-    case 'oval': return <OvalTable3D table={table} assignedCount={assignedCount} position={position} />
-    case 'square': return <SquareTable3D table={table} assignedCount={assignedCount} position={position} />
-    default: return <RoundTable3D table={table} assignedCount={assignedCount} position={position} />
+    case 'round':  return <RoundTable3D {...props} />
+    case 'rect':   return <RectTable3D {...props} />
+    case 'oval':   return <OvalTable3D {...props} />
+    case 'square': return <SquareTable3D {...props} />
+    default:       return <RoundTable3D {...props} />
   }
 }
 
@@ -328,12 +354,16 @@ function Scene() {
   const tables = useWeddingStore((s) => s.tables)
   const decorations = useWeddingStore((s) => s.decorations)
   const guests = useWeddingStore((s) => s.guests)
+  const families = useWeddingStore((s) => s.families)
   const room = useWeddingStore((s) => s.room)
 
   const guestsByTable = useMemo(() => {
     const map = {}
     guests.forEach((g) => {
-      if (g.tableId) map[g.tableId] = (map[g.tableId] || 0) + 1
+      if (g.tableId) {
+        if (!map[g.tableId]) map[g.tableId] = []
+        map[g.tableId].push(g)
+      }
     })
     return map
   }, [guests])
@@ -364,7 +394,8 @@ function Scene() {
         <Table3D
           key={table.id}
           table={table}
-          assignedCount={guestsByTable[table.id] || 0}
+          tableGuests={guestsByTable[table.id] || []}
+          families={families}
           roomWidth={room.width}
           roomHeight={room.height}
         />

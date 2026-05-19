@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import useWeddingStore from '../store/useWeddingStore.js'
 
 const COLORS = [
@@ -162,6 +163,144 @@ function FamilySection() {
   )
 }
 
+// ──────────────────────────────────────────────────────────────
+// Excel / CSV import helper
+// ──────────────────────────────────────────────────────────────
+const NAME_KEYS    = ['nombre', 'name', 'invitado', 'guest', 'apellidos']
+const FAMILY_KEYS  = ['familia', 'family', 'grupo', 'group']
+const DIETARY_KEYS = ['dieta', 'dietary', 'alimentacion', 'alimentación', 'food', 'menu', 'menú']
+const NOTES_KEYS   = ['notas', 'notes', 'observaciones', 'obs', 'comentarios']
+
+function matchKey(headers, candidates) {
+  for (const cand of candidates) {
+    const found = headers.find(h => h.toLowerCase().replace(/\s+/g, '') === cand)
+    if (found) return found
+  }
+  return null
+}
+
+function parseExcelFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result)
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+        if (!rows.length) { resolve([]); return }
+
+        const headers = Object.keys(rows[0])
+        const nameKey    = matchKey(headers, NAME_KEYS)    || headers[0]
+        const familyKey  = matchKey(headers, FAMILY_KEYS)  || null
+        const dietaryKey = matchKey(headers, DIETARY_KEYS) || null
+        const notesKey   = matchKey(headers, NOTES_KEYS)   || null
+
+        const guests = rows
+          .map(r => ({
+            name:       String(r[nameKey] || '').trim(),
+            familyName: familyKey  ? String(r[familyKey]  || '').trim() : '',
+            dietary:    dietaryKey ? String(r[dietaryKey] || '').trim() : '',
+            notes:      notesKey   ? String(r[notesKey]   || '').trim() : '',
+          }))
+          .filter(g => g.name)
+
+        resolve(guests)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+function ExcelImport() {
+  const bulkAddGuests = useWeddingStore((s) => s.bulkAddGuests)
+  const fileRef = useRef(null)
+  const [preview, setPreview] = useState(null)   // parsed guest list before confirm
+  const [error, setError] = useState(null)
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setError(null)
+    try {
+      const parsed = await parseExcelFile(file)
+      if (!parsed.length) { setError('No se encontraron invitados en el archivo.'); return }
+      setPreview(parsed)
+    } catch {
+      setError('Error leyendo el archivo. Asegúrate de que es un Excel (.xlsx) o CSV válido.')
+    }
+    e.target.value = ''
+  }
+
+  const handleConfirm = () => {
+    bulkAddGuests(preview)
+    setPreview(null)
+  }
+
+  return (
+    <div className="panel-section">
+      <div className="panel-title">📥 Importar invitados</div>
+      <p style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 10, lineHeight: 1.5 }}>
+        Sube un Excel (.xlsx) o CSV con columnas: <strong>Nombre</strong>, Familia, Dieta, Notas
+      </p>
+
+      {error && (
+        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6,
+          padding: '8px 12px', fontSize: 12, color: '#dc2626', marginBottom: 8 }}>
+          {error}
+        </div>
+      )}
+
+      {preview && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8,
+          padding: 12, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#166534', marginBottom: 8 }}>
+            ✅ {preview.length} invitados encontrados
+          </div>
+          <div style={{ maxHeight: 160, overflowY: 'auto', marginBottom: 10 }}>
+            {preview.map((g, i) => (
+              <div key={i} style={{ fontSize: 12, padding: '2px 0',
+                borderBottom: '1px solid #bbf7d0', display: 'flex', gap: 8 }}>
+                <span style={{ fontWeight: 600, flex: 1 }}>{g.name}</span>
+                {g.familyName && <span style={{ color: '#15803d' }}>{g.familyName}</span>}
+                {g.dietary && <span style={{ color: '#6b7280', fontStyle: 'italic' }}>{g.dietary}</span>}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setPreview(null)}>Cancelar</button>
+            <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={handleConfirm}>
+              Importar {preview.length} invitados
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!preview && (
+        <>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            style={{ display: 'none' }}
+            onChange={handleFile}
+          />
+          <button
+            className="btn btn-secondary btn-full"
+            onClick={() => fileRef.current?.click()}
+          >
+            📂 Seleccionar archivo Excel / CSV
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
 export default function GuestPanel() {
   const guests = useWeddingStore((s) => s.guests)
   const families = useWeddingStore((s) => s.families)
@@ -371,6 +510,7 @@ export default function GuestPanel() {
         ))}
       </div>
 
+      <ExcelImport />
       <FamilySection />
     </>
   )

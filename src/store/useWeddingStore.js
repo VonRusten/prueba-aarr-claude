@@ -67,6 +67,39 @@ const useWeddingStore = create(
         guests: state.guests.map(g => g.familyId === id ? { ...g, familyId: null } : g)
       })),
 
+      // Bulk import from Excel
+      bulkAddGuests: (guestList) => set((state) => {
+        const COLORS = [
+          '#e8a4c9','#a4c8e8','#a4e8b8','#f0c89e','#c9a4e8',
+          '#e8e0a4','#a4e8e0','#e8b4a4','#b4a4e8','#a4b4e8',
+          '#f0a4a4','#a4f0c8','#f0d4a4','#a4c4f0','#d4a4f0',
+        ]
+        const newFamilies = [...state.families]
+
+        const getOrCreateFamily = (name) => {
+          if (!name || !name.trim()) return null
+          const norm = name.trim().toLowerCase()
+          const existing = newFamilies.find(f => f.name.toLowerCase() === norm)
+          if (existing) return existing.id
+          const newF = { id: generateId(), name: name.trim(), color: COLORS[newFamilies.length % COLORS.length] }
+          newFamilies.push(newF)
+          return newF.id
+        }
+
+        const newGuests = guestList
+          .filter(g => g.name && g.name.trim())
+          .map(g => ({
+            id: generateId(),
+            name: g.name.trim(),
+            familyId: getOrCreateFamily(g.familyName),
+            dietary: g.dietary || '',
+            notes: g.notes || '',
+            tableId: null,
+          }))
+
+        return { families: newFamilies, guests: [...state.guests, ...newGuests] }
+      }),
+
       // Table actions
       addTable: (table) => set((state) => ({
         tables: [...state.tables, { id: generateId(), x: 200, y: 200, rotation: 0, isSpecial: false, specialType: '', ...table }]
