@@ -14,6 +14,7 @@ export default function RoomSettings() {
   const room = useWeddingStore((s) => s.room)
   const savedRooms = useWeddingStore((s) => s.savedRooms)
   const updateRoom = useWeddingStore((s) => s.updateRoom)
+  const updateDoor = useWeddingStore((s) => s.updateDoor)
   const saveRoom = useWeddingStore((s) => s.saveRoom)
   const loadRoom = useWeddingStore((s) => s.loadRoom)
   const deleteRoom = useWeddingStore((s) => s.deleteRoom)
@@ -94,6 +95,40 @@ export default function RoomSettings() {
           </div>
         </div>
       </div>
+
+      {/* Door settings */}
+      {room.door && (
+        <div className="panel-section">
+          <div className="panel-title">🚪 Puerta</div>
+          <p style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 10 }}>
+            Arrastra la puerta en el plano 2D para reposicionarla
+          </p>
+          <div className="form-group">
+            <label className="form-label">Etiqueta</label>
+            <input className="form-input"
+              value={room.door.label || 'Entrada'}
+              onChange={e => updateDoor({ label: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Ancho de abertura (px)</label>
+            <input className="form-input" type="number" min="40" max="200"
+              value={room.door.size || 90}
+              onChange={e => updateDoor({ size: Math.max(40, parseInt(e.target.value) || 90) })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Rotación (°)</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[0, 90, 180, 270].map(deg => (
+                <button key={deg}
+                  className={`btn btn-sm ${(room.door.rotation || 0) === deg ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => updateDoor({ rotation: deg })}>
+                  {deg}°
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="panel-section">
         <div className="panel-title">Plantillas de sala</div>

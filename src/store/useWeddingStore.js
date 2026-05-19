@@ -40,13 +40,14 @@ const useWeddingStore = create(
       families: sampleFamilies,
       tables: sampleTables,
       decorations: sampleDecorations,
-      room: { width: 1100, height: 750, name: 'Salón Principal', background: '#f5f0e8' },
+      room: { width: 1100, height: 750, name: 'Salón Principal', background: '#f5f0e8',
+        door: { x: 550, y: 747, rotation: 0, size: 90, label: 'Entrada' } },
       savedRooms: [],
       ui: { view: 'list', selectedTableId: null, sidebarTab: 'guests' },
 
       // Guest actions
       addGuest: (guest) => set((state) => ({
-        guests: [...state.guests, { id: generateId(), tableId: null, dietary: '', notes: '', ...guest }]
+        guests: [...state.guests, { id: generateId(), tableId: null, seatIndex: null, dietary: '', notes: '', ...guest }]
       })),
       updateGuest: (id, updates) => set((state) => ({
         guests: state.guests.map(g => g.id === id ? { ...g, ...updates } : g)
@@ -129,16 +130,44 @@ const useWeddingStore = create(
       moveDecoration: (id, x, y) => set((state) => ({
         decorations: state.decorations.map(d => d.id === id ? { ...d, x, y } : d)
       })),
+      updateDecoration: (id, updates) => set((state) => ({
+        decorations: state.decorations.map(d => d.id === id ? { ...d, ...updates } : d)
+      })),
       deleteDecoration: (id) => set((state) => ({
         decorations: state.decorations.filter(d => d.id !== id)
       })),
 
       // Guest-Table assignment
       assignGuestToTable: (guestId, tableId) => set((state) => ({
-        guests: state.guests.map(g => g.id === guestId ? { ...g, tableId } : g)
+        guests: state.guests.map(g => g.id === guestId ? { ...g, tableId, seatIndex: null } : g)
       })),
       removeGuestFromTable: (guestId) => set((state) => ({
-        guests: state.guests.map(g => g.id === guestId ? { ...g, tableId: null } : g)
+        guests: state.guests.map(g => g.id === guestId ? { ...g, tableId: null, seatIndex: null } : g)
+      })),
+      // Assign to a specific seat (swaps if target seat is occupied)
+      assignGuestToSeat: (guestId, tableId, seatIndex) => set((state) => {
+        const displaced = state.guests.find(
+          g => g.tableId === tableId && g.seatIndex === seatIndex && g.id !== guestId
+        )
+        const sourceGuest = state.guests.find(g => g.id === guestId)
+        return {
+          guests: state.guests.map(g => {
+            if (g.id === guestId) return { ...g, tableId, seatIndex }
+            // Swap: displaced guest takes source seat (same table) or becomes unassigned
+            if (displaced && g.id === displaced.id) {
+              if (sourceGuest && sourceGuest.tableId) {
+                return { ...g, tableId: sourceGuest.tableId, seatIndex: sourceGuest.seatIndex }
+              }
+              return { ...g, seatIndex: null }
+            }
+            return g
+          })
+        }
+      }),
+
+      // Door actions
+      updateDoor: (updates) => set((state) => ({
+        room: { ...state.room, door: { ...state.room.door, ...updates } }
       })),
 
       // UI actions
