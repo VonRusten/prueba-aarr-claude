@@ -1,517 +1,324 @@
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import useWeddingStore from '../store/useWeddingStore.js'
 
-const COLORS = [
-  '#e8a4c9', '#a4c8e8', '#a4e8b8', '#f0c89e', '#c9a4e8',
-  '#e8e0a4', '#a4e8e0', '#e8b4a4', '#b4a4e8', '#a4b4e8',
+const FAMILY_COLORS = [
+  '#e8a4c9','#a4c8e8','#a4e8b8','#f0c89e','#c9a4e8',
+  '#e8e0a4','#a4e8e0','#e8b4a4','#b4a4e8','#f0a4a4',
 ]
 
-function FamilySection() {
-  const families = useWeddingStore((s) => s.families)
-  const guests = useWeddingStore((s) => s.guests)
-  const addFamily = useWeddingStore((s) => s.addFamily)
-  const updateFamily = useWeddingStore((s) => s.updateFamily)
-  const deleteFamily = useWeddingStore((s) => s.deleteFamily)
+const NAME_KEYS     = ['nombre','name','invitado','guest','nombre completo','full name']
+const FAMILY_KEYS   = ['familia','family','grupo','group','apellido','surname','apellidos']
+const DIETARY_KEYS  = ['menu','menú','dieta','dietary','alimentación','restricción','restriction']
+const NOTES_KEYS    = ['nota','notas','notes','comentario','observación','comment']
 
-  const [showForm, setShowForm] = useState(false)
-  const [newFamilyName, setNewFamilyName] = useState('')
-  const [newFamilyColor, setNewFamilyColor] = useState(COLORS[0])
-  const [editingId, setEditingId] = useState(null)
-  const [editName, setEditName] = useState('')
+function findCol(headers, keys) {
+  return headers.find(h => keys.some(k => h.toLowerCase().replace(/[^a-záéíóúñ\s]/gi,'').trim().includes(k)))
+}
 
-  const guestCountByFamily = useMemo(() => {
-    const map = {}
-    guests.forEach((g) => {
-      if (g.familyId) map[g.familyId] = (map[g.familyId] || 0) + 1
+export default function GuestPanel() {
+  const guests              = useWeddingStore(s => s.guests)
+  const families            = useWeddingStore(s => s.families)
+  const tables              = useWeddingStore(s => s.tables)
+  const selectedGuestIds    = useWeddingStore(s => s.ui.selectedGuestIds)
+  const toggleGuestSelection = useWeddingStore(s => s.toggleGuestSelection)
+  const selectFamily        = useWeddingStore(s => s.selectFamily)
+  const clearSelection      = useWeddingStore(s => s.clearSelection)
+  const addGuest            = useWeddingStore(s => s.addGuest)
+  const addFamily           = useWeddingStore(s => s.addFamily)
+  const bulkAddGuests       = useWeddingStore(s => s.bulkAddGuests)
+  const deleteGuest         = useWeddingStore(s => s.deleteGuest)
+
+  const [search, setSearch]         = useState('')
+  const [showImport, setShowImport] = useState(false)
+  const [showAdd, setShowAdd]       = useState(false)
+  const [addForm, setAddForm]       = useState({ name: '', familyName: '', dietary: '', notes: '' })
+
+  const tableMap = useMemo(() => {
+    const m = {}
+    tables.forEach(t => { m[t.id] = t.name })
+    return m
+  }, [tables])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return guests
+    const q = search.toLowerCase()
+    return guests.filter(g => g.name.toLowerCase().includes(q))
+  }, [guests, search])
+
+  // Group all guests by family
+  const familyGroups = useMemo(() => {
+    const groups = []
+    const seen = new Set()
+
+    families.forEach(f => {
+      const fGuests = filtered.filter(g => g.familyId === f.id)
+      if (fGuests.length > 0) {
+        groups.push({ family: f, guests: fGuests })
+        fGuests.forEach(g => seen.add(g.id))
+      }
     })
-    return map
-  }, [guests])
 
-  const handleAddFamily = () => {
-    if (!newFamilyName.trim()) return
-    addFamily({ name: newFamilyName.trim(), color: newFamilyColor })
-    setNewFamilyName('')
-    setNewFamilyColor(COLORS[Math.floor(Math.random() * COLORS.length)])
-    setShowForm(false)
-  }
+    const noFamily = filtered.filter(g => !g.familyId && !seen.has(g.id))
+    if (noFamily.length > 0) groups.push({ family: null, guests: noFamily })
 
-  const handleStartEdit = (family) => {
-    setEditingId(family.id)
-    setEditName(family.name)
-  }
+    return groups
+  }, [filtered, families])
 
-  const handleSaveEdit = (id, currentColor) => {
-    if (editName.trim()) updateFamily(id, { name: editName.trim() })
-    setEditingId(null)
-  }
+  const unassigned = filtered.filter(g => !g.tableId)
+  const selCount = selectedGuestIds.length
 
-  return (
-    <div className="panel-section">
-      <div className="panel-title">
-        Familias
-        <span className="count-badge">{families.length}</span>
-      </div>
-
-      {families.map((family) => (
-        <div key={family.id} className="family-item">
-          <div
-            className="family-color-swatch"
-            style={{ background: family.color }}
-          />
-          {editingId === family.id ? (
-            <input
-              className="form-input"
-              style={{ flex: 1, padding: '3px 6px', fontSize: 13 }}
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveEdit(family.id, family.color)
-                if (e.key === 'Escape') setEditingId(null)
-              }}
-              autoFocus
-            />
-          ) : (
-            <span className="family-name">{family.name}</span>
-          )}
-          <span className="family-count">{guestCountByFamily[family.id] || 0}</span>
-          {editingId === family.id ? (
-            <button className="btn btn-sm btn-primary" onClick={() => handleSaveEdit(family.id, family.color)}>✓</button>
-          ) : (
-            <>
-              <button
-                className="btn btn-icon btn-ghost"
-                title="Cambiar color"
-                style={{ position: 'relative', overflow: 'hidden' }}
-              >
-                <span>🎨</span>
-                <input
-                  type="color"
-                  value={family.color}
-                  onChange={(e) => updateFamily(family.id, { color: e.target.value })}
-                  style={{
-                    position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%'
-                  }}
-                />
-              </button>
-              <button className="btn btn-icon btn-ghost" onClick={() => handleStartEdit(family)}>✏️</button>
-              <button
-                className="btn btn-icon btn-ghost"
-                onClick={() => {
-                  if (confirm(`¿Eliminar familia "${family.name}"?`)) deleteFamily(family.id)
-                }}
-              >🗑️</button>
-            </>
-          )}
-        </div>
-      ))}
-
-      {showForm && (
-        <div className="inline-form" style={{ marginTop: 8 }}>
-          <div className="form-group">
-            <label className="form-label">Nombre de familia</label>
-            <input
-              className="form-input"
-              placeholder="Ej: García"
-              value={newFamilyName}
-              onChange={(e) => setNewFamilyName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAddFamily() }}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Color</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {COLORS.map((c) => (
-                <div
-                  key={c}
-                  onClick={() => setNewFamilyColor(c)}
-                  style={{
-                    width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer',
-                    border: newFamilyColor === c ? '2.5px solid #6b4c3b' : '2px solid rgba(0,0,0,0.1)',
-                    transition: 'transform 0.1s',
-                    transform: newFamilyColor === c ? 'scale(1.2)' : 'scale(1)'
-                  }}
-                />
-              ))}
-              <input
-                type="color"
-                value={newFamilyColor}
-                onChange={(e) => setNewFamilyColor(e.target.value)}
-                style={{ width: 24, height: 24, border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }}
-                title="Color personalizado"
-              />
-            </div>
-          </div>
-          <div className="form-actions">
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowForm(false)}>Cancelar</button>
-            <button className="btn btn-primary btn-sm" onClick={handleAddFamily}>Añadir</button>
-          </div>
-        </div>
-      )}
-
-      {!showForm && (
-        <button
-          className="btn btn-secondary btn-sm btn-full"
-          style={{ marginTop: 8 }}
-          onClick={() => setShowForm(true)}
-        >
-          + Nueva familia
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ──────────────────────────────────────────────────────────────
-// Excel / CSV import helper
-// ──────────────────────────────────────────────────────────────
-const NAME_KEYS    = ['nombre', 'name', 'invitado', 'guest', 'apellidos']
-const FAMILY_KEYS  = ['familia', 'family', 'grupo', 'group']
-const DIETARY_KEYS = ['dieta', 'dietary', 'alimentacion', 'alimentación', 'food', 'menu', 'menú']
-const NOTES_KEYS   = ['notas', 'notes', 'observaciones', 'obs', 'comentarios']
-
-function matchKey(headers, candidates) {
-  for (const cand of candidates) {
-    const found = headers.find(h => h.toLowerCase().replace(/\s+/g, '') === cand)
-    if (found) return found
-  }
-  return null
-}
-
-function parseExcelFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result)
-        const wb = XLSX.read(data, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-        if (!rows.length) { resolve([]); return }
-
-        const headers = Object.keys(rows[0])
-        const nameKey    = matchKey(headers, NAME_KEYS)    || headers[0]
-        const familyKey  = matchKey(headers, FAMILY_KEYS)  || null
-        const dietaryKey = matchKey(headers, DIETARY_KEYS) || null
-        const notesKey   = matchKey(headers, NOTES_KEYS)   || null
-
-        const guests = rows
-          .map(r => ({
-            name:       String(r[nameKey] || '').trim(),
-            familyName: familyKey  ? String(r[familyKey]  || '').trim() : '',
-            dietary:    dietaryKey ? String(r[dietaryKey] || '').trim() : '',
-            notes:      notesKey   ? String(r[notesKey]   || '').trim() : '',
-          }))
-          .filter(g => g.name)
-
-        resolve(guests)
-      } catch (err) {
-        reject(err)
+  const handleAddGuest = () => {
+    if (!addForm.name.trim()) return
+    let familyId = null
+    if (addForm.familyName.trim()) {
+      const existing = families.find(f => f.name.toLowerCase() === addForm.familyName.toLowerCase())
+      if (existing) {
+        familyId = existing.id
+      } else {
+        const newFamily = { id: Date.now().toString(36), name: addForm.familyName.trim(), color: FAMILY_COLORS[families.length % FAMILY_COLORS.length] }
+        addFamily(newFamily)
+        familyId = newFamily.id
       }
     }
-    reader.onerror = reject
-    reader.readAsArrayBuffer(file)
-  })
-}
-
-function ExcelImport() {
-  const bulkAddGuests = useWeddingStore((s) => s.bulkAddGuests)
-  const fileRef = useRef(null)
-  const [preview, setPreview] = useState(null)   // parsed guest list before confirm
-  const [error, setError] = useState(null)
-
-  const handleFile = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setError(null)
-    try {
-      const parsed = await parseExcelFile(file)
-      if (!parsed.length) { setError('No se encontraron invitados en el archivo.'); return }
-      setPreview(parsed)
-    } catch {
-      setError('Error leyendo el archivo. Asegúrate de que es un Excel (.xlsx) o CSV válido.')
-    }
-    e.target.value = ''
-  }
-
-  const handleConfirm = () => {
-    bulkAddGuests(preview)
-    setPreview(null)
+    addGuest({ name: addForm.name.trim(), familyId, dietary: addForm.dietary, notes: addForm.notes })
+    setAddForm({ name: '', familyName: '', dietary: '', notes: '' })
+    setShowAdd(false)
   }
 
   return (
-    <div className="panel-section">
-      <div className="panel-title">📥 Importar invitados</div>
-      <p style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 10, lineHeight: 1.5 }}>
-        Sube un Excel (.xlsx) o CSV con columnas: <strong>Nombre</strong>, Familia, Dieta, Notas
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Header */}
+      <div className="pl-header">
+        <div className="pl-title">
+          Invitados
+          <span className="cnt">{guests.length}</span>
+          {unassigned.length > 0 && (
+            <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.2)', color: '#FBBF24', padding: '1px 6px', borderRadius: 999, marginLeft: 2 }}>
+              {unassigned.length} sin mesa
+            </span>
+          )}
+        </div>
+        <div className="search-row">
+          <div className="search-wrap">
+            <span className="search-icon">⌕</span>
+            <input
+              className="search-inp"
+              placeholder="Buscar invitado..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <button className="icon-btn" title="Importar Excel/CSV" onClick={() => setShowImport(true)}>📥</button>
+          <button className="icon-btn" title="Añadir invitado" onClick={() => setShowAdd(v => !v)}
+            style={showAdd ? { background: 'var(--gold-l)', borderColor: 'var(--gold)', color: 'var(--gold-d)' } : {}}>
+            +
+          </button>
+        </div>
+      </div>
 
-      {error && (
-        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6,
-          padding: '8px 12px', fontSize: 12, color: '#dc2626', marginBottom: 8 }}>
-          {error}
+      {/* Add guest form */}
+      {showAdd && (
+        <div className="add-guest-form">
+          <div className="fg">
+            <label>Nombre *</label>
+            <input value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="Nombre completo" autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleAddGuest()} />
+          </div>
+          <div className="fg">
+            <label>Familia</label>
+            <input value={addForm.familyName} onChange={e => setAddForm(f => ({ ...f, familyName: e.target.value }))}
+              placeholder="García, Martínez..." list="family-list" />
+            <datalist id="family-list">
+              {families.map(f => <option key={f.id} value={f.name} />)}
+            </datalist>
+          </div>
+          <div className="fg">
+            <label>Menú especial</label>
+            <input value={addForm.dietary} onChange={e => setAddForm(f => ({ ...f, dietary: e.target.value }))}
+              placeholder="Vegano, sin gluten..." />
+          </div>
+          <div className="form-btns">
+            <button className="btn btn-dark btn-sm btn-full" style={{ flex: 0, minWidth: 70 }} onClick={() => setShowAdd(false)}>Cancelar</button>
+            <button className="btn btn-primary btn-sm btn-full" onClick={handleAddGuest}>Añadir</button>
+          </div>
         </div>
       )}
 
-      {preview && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8,
-          padding: 12, marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#166534', marginBottom: 8 }}>
-            ✅ {preview.length} invitados encontrados
+      {/* Guest list */}
+      <div className="pl-body">
+        {filtered.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-icon">👥</div>
+            {search ? 'Sin resultados' : 'No hay invitados'}
           </div>
-          <div style={{ maxHeight: 160, overflowY: 'auto', marginBottom: 10 }}>
-            {preview.map((g, i) => (
-              <div key={i} style={{ fontSize: 12, padding: '2px 0',
-                borderBottom: '1px solid #bbf7d0', display: 'flex', gap: 8 }}>
-                <span style={{ fontWeight: 600, flex: 1 }}>{g.name}</span>
-                {g.familyName && <span style={{ color: '#15803d' }}>{g.familyName}</span>}
-                {g.dietary && <span style={{ color: '#6b7280', fontStyle: 'italic' }}>{g.dietary}</span>}
+        )}
+
+        {familyGroups.map(({ family, guests: fGuests }) => {
+          const allSelected = fGuests.every(g => selectedGuestIds.includes(g.id))
+          const someSelected = fGuests.some(g => selectedGuestIds.includes(g.id))
+
+          return (
+            <div key={family?.id || '__none__'} className="fam-section">
+              {/* Family header */}
+              <div className="fam-header" onClick={() => family && selectFamily(family.id)}>
+                {family
+                  ? <div className="fam-dot" style={{ background: family.color }} />
+                  : <div className="fam-dot" style={{ background: '#94A3B8' }} />}
+                <span className="fam-name">{family ? family.name : 'Sin familia'}</span>
+                <span className="fam-cnt">{fGuests.length}</span>
+                {family && (
+                  <button
+                    className="sel-all"
+                    onClick={e => { e.stopPropagation(); selectFamily(family.id) }}
+                  >
+                    {allSelected ? 'Desel.' : someSelected ? 'Todos' : 'Todos'}
+                  </button>
+                )}
               </div>
-            ))}
+
+              {/* Guests in family */}
+              {fGuests.map(g => (
+                <GuestItem
+                  key={g.id}
+                  guest={g}
+                  selected={selectedGuestIds.includes(g.id)}
+                  tableLabel={g.tableId ? tableMap[g.tableId] : null}
+                  onClick={() => toggleGuestSelection(g.id)}
+                  onDelete={() => { if (confirm(`¿Eliminar a ${g.name}?`)) deleteGuest(g.id) }}
+                />
+              ))}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Selection action bar */}
+      {selCount > 0 && (
+        <div className="sel-bar">
+          <div className="sel-hint">
+            {selCount} seleccionado{selCount !== 1 ? 's' : ''} · Clic en una mesa para asignar
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setPreview(null)}>Cancelar</button>
-            <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={handleConfirm}>
-              Importar {preview.length} invitados
+          <div className="sel-actions">
+            <button className="btn btn-dark btn-sm btn-full" onClick={clearSelection}>
+              Cancelar selección
             </button>
           </div>
         </div>
       )}
 
-      {!preview && (
-        <>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            style={{ display: 'none' }}
-            onChange={handleFile}
-          />
-          <button
-            className="btn btn-secondary btn-full"
-            onClick={() => fileRef.current?.click()}
-          >
-            📂 Seleccionar archivo Excel / CSV
-          </button>
-        </>
-      )}
+      {/* Import modal */}
+      {showImport && <ExcelImport onClose={() => setShowImport(false)} onImport={bulkAddGuests} />}
     </div>
   )
 }
 
-// ──────────────────────────────────────────────────────────────
-export default function GuestPanel() {
-  const guests = useWeddingStore((s) => s.guests)
-  const families = useWeddingStore((s) => s.families)
-  const tables = useWeddingStore((s) => s.tables)
-  const addGuest = useWeddingStore((s) => s.addGuest)
-  const updateGuest = useWeddingStore((s) => s.updateGuest)
-  const deleteGuest = useWeddingStore((s) => s.deleteGuest)
+function GuestItem({ guest, selected, tableLabel, onClick, onDelete }) {
+  return (
+    <div className={`guest-item${selected ? ' sel' : ''}`} onClick={onClick}>
+      <div className="g-check">
+        {selected && <span className="g-check-mark">✓</span>}
+      </div>
+      <span className="g-name">{guest.name}</span>
+      <span className={`g-table${!tableLabel ? ' no-table' : ''}`} title={tableLabel || 'Sin mesa'}>
+        {tableLabel || '—'}
+      </span>
+    </div>
+  )
+}
 
-  const [showForm, setShowForm] = useState(false)
-  const [filterFamily, setFilterFamily] = useState('all')
-  const [filterAssigned, setFilterAssigned] = useState('all')
-  const [editingId, setEditingId] = useState(null)
+function ExcelImport({ onClose, onImport }) {
+  const [preview, setPreview] = useState(null)
+  const [dragging, setDragging] = useState(false)
+  const inputRef = React.useRef()
 
-  const [form, setForm] = useState({
-    name: '', familyId: '', dietary: '', notes: ''
-  })
-
-  const [editForm, setEditForm] = useState({
-    name: '', familyId: '', dietary: '', notes: ''
-  })
-
-  const filteredGuests = useMemo(() => {
-    return guests.filter((g) => {
-      if (filterFamily !== 'all' && g.familyId !== filterFamily) return false
-      if (filterAssigned === 'assigned' && !g.tableId) return false
-      if (filterAssigned === 'unassigned' && g.tableId) return false
-      return true
-    })
-  }, [guests, filterFamily, filterAssigned])
-
-  const getFamilyColor = (familyId) => {
-    const f = families.find((f) => f.id === familyId)
-    return f ? f.color : '#ccc'
+  const processFile = (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'binary' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+        if (rows.length < 2) return
+        const headers = rows[0].map(String)
+        const nameCol    = findCol(headers, NAME_KEYS)
+        const familyCol  = findCol(headers, FAMILY_KEYS)
+        const dietaryCol = findCol(headers, DIETARY_KEYS)
+        const notesCol   = findCol(headers, NOTES_KEYS)
+        const parsed = rows.slice(1)
+          .filter(r => r.some(c => c !== ''))
+          .map(r => ({
+            name: nameCol ? String(r[headers.indexOf(nameCol)] || '').trim() : '',
+            familyName: familyCol ? String(r[headers.indexOf(familyCol)] || '').trim() : '',
+            dietary: dietaryCol ? String(r[headers.indexOf(dietaryCol)] || '').trim() : '',
+            notes: notesCol ? String(r[headers.indexOf(notesCol)] || '').trim() : '',
+          }))
+          .filter(g => g.name)
+        setPreview({ guests: parsed, nameCol, familyCol })
+      } catch { alert('No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.') }
+    }
+    reader.readAsBinaryString(file)
   }
 
-  const getTableName = (tableId) => {
-    const t = tables.find((t) => t.id === tableId)
-    return t ? t.name : null
-  }
-
-  const handleAdd = () => {
-    if (!form.name.trim()) return
-    addGuest({ name: form.name.trim(), familyId: form.familyId || null, dietary: form.dietary, notes: form.notes })
-    setForm({ name: '', familyId: '', dietary: '', notes: '' })
-    setShowForm(false)
-  }
-
-  const handleStartEdit = (guest) => {
-    setEditingId(guest.id)
-    setEditForm({ name: guest.name, familyId: guest.familyId || '', dietary: guest.dietary, notes: guest.notes })
-  }
-
-  const handleSaveEdit = (id) => {
-    updateGuest(id, { name: editForm.name.trim(), familyId: editForm.familyId || null, dietary: editForm.dietary, notes: editForm.notes })
-    setEditingId(null)
+  const handleConfirm = () => {
+    if (!preview?.guests.length) return
+    onImport(preview.guests)
+    onClose()
   }
 
   return (
-    <>
-      <div className="panel-section">
-        <div className="panel-title">
-          Invitados
-          <span className="count-badge">{guests.length}</span>
+    <div className="import-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="import-modal">
+        <div className="import-title">📥 Importar invitados</div>
+
+        <div
+          className={`import-drop${dragging ? ' dragging' : ''}`}
+          onClick={() => inputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={e => { e.preventDefault(); setDragging(false); processFile(e.dataTransfer.files[0]) }}
+        >
+          <div style={{ fontSize: 32 }}>📂</div>
+          <p>Arrastra un archivo o haz clic para seleccionar</p>
+          <p style={{ fontSize: 11, marginTop: 4, color: '#9CA3AF' }}>Excel (.xlsx, .xls) o CSV</p>
         </div>
 
-        <div className="filter-row">
-          <select value={filterFamily} onChange={(e) => setFilterFamily(e.target.value)}>
-            <option value="all">Todas las familias</option>
-            {families.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-            <option value="none">Sin familia</option>
-          </select>
-          <select value={filterAssigned} onChange={(e) => setFilterAssigned(e.target.value)}>
-            <option value="all">Todos</option>
-            <option value="assigned">Asignados</option>
-            <option value="unassigned">Sin asignar</option>
-          </select>
-        </div>
+        <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
+          onChange={e => processFile(e.target.files?.[0])} />
 
-        {showForm && (
-          <div className="inline-form">
-            <div className="form-group">
-              <label className="form-label">Nombre *</label>
-              <input
-                className="form-input"
-                placeholder="Nombre completo"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                autoFocus
-              />
+        {preview && (
+          <>
+            <div style={{ marginBottom: 10, fontSize: 13, color: '#374151' }}>
+              <strong>{preview.guests.length} invitados</strong> detectados
+              {preview.nameCol && <span style={{ color: '#9CA3AF', marginLeft: 8 }}>· Columna: {preview.nameCol}</span>}
+              {preview.familyCol && <span style={{ color: '#9CA3AF', marginLeft: 6 }}>· Familia: {preview.familyCol}</span>}
             </div>
-            <div className="form-group">
-              <label className="form-label">Familia</label>
-              <select
-                className="form-select"
-                value={form.familyId}
-                onChange={(e) => setForm({ ...form, familyId: e.target.value })}
-              >
-                <option value="">Sin familia</option>
-                {families.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
+            <div className="import-preview">
+              {preview.guests.slice(0, 20).map((g, i) => (
+                <div key={i} className="import-preview-item">
+                  <span style={{ fontWeight: 500, flex: 1 }}>{g.name}</span>
+                  {g.familyName && <span style={{ color: '#9CA3AF', fontSize: 11 }}>{g.familyName}</span>}
+                  {g.dietary && <span style={{ fontSize: 11, color: '#C9956C' }}>{g.dietary}</span>}
+                </div>
+              ))}
+              {preview.guests.length > 20 && (
+                <div style={{ textAlign: 'center', padding: '8px 0', color: '#9CA3AF', fontSize: 12 }}>
+                  ... y {preview.guests.length - 20} más
+                </div>
+              )}
             </div>
-            <div className="form-group">
-              <label className="form-label">Dieta</label>
-              <input
-                className="form-input"
-                placeholder="Vegetariano, sin gluten..."
-                value={form.dietary}
-                onChange={(e) => setForm({ ...form, dietary: e.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Notas</label>
-              <input
-                className="form-input"
-                placeholder="Observaciones..."
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button className="btn btn-primary btn-sm" onClick={handleAdd}>Añadir invitado</button>
-            </div>
-          </div>
+          </>
         )}
 
-        {!showForm && (
-          <button className="btn btn-primary btn-full" onClick={() => setShowForm(true)}>
-            + Añadir invitado
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 'auto', paddingTop: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary btn-sm" onClick={handleConfirm} disabled={!preview?.guests.length}>
+            Importar {preview?.guests.length ? `(${preview.guests.length})` : ''}
           </button>
-        )}
+        </div>
       </div>
-
-      <div className="panel-section" style={{ paddingTop: 8 }}>
-        {filteredGuests.length === 0 && (
-          <div className="empty-state">No hay invitados con estos filtros</div>
-        )}
-        {filteredGuests.map((guest) => (
-          <div key={guest.id}>
-            {editingId === guest.id ? (
-              <div className="inline-form" style={{ marginBottom: 8 }}>
-                <div className="form-group">
-                  <label className="form-label">Nombre</label>
-                  <input
-                    className="form-input"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    autoFocus
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Familia</label>
-                  <select
-                    className="form-select"
-                    value={editForm.familyId}
-                    onChange={(e) => setEditForm({ ...editForm, familyId: e.target.value })}
-                  >
-                    <option value="">Sin familia</option>
-                    {families.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Dieta</label>
-                  <input
-                    className="form-input"
-                    value={editForm.dietary}
-                    onChange={(e) => setEditForm({ ...editForm, dietary: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Notas</label>
-                  <input
-                    className="form-input"
-                    value={editForm.notes}
-                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                  />
-                </div>
-                <div className="form-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancelar</button>
-                  <button className="btn btn-primary btn-sm" onClick={() => handleSaveEdit(guest.id)}>Guardar</button>
-                </div>
-              </div>
-            ) : (
-              <div className="guest-item">
-                <div className="family-dot" style={{ background: getFamilyColor(guest.familyId) }} />
-                <span className="guest-name" title={guest.name}>{guest.name}</span>
-                <span className={`guest-table${!guest.tableId ? ' unassigned' : ''}`}>
-                  {guest.tableId ? getTableName(guest.tableId) : 'Sin asignar'}
-                </span>
-                <div className="guest-actions">
-                  <button className="btn btn-icon btn-ghost" onClick={() => handleStartEdit(guest)} title="Editar">✏️</button>
-                  <button
-                    className="btn btn-icon btn-ghost"
-                    onClick={() => { if (confirm(`¿Eliminar a "${guest.name}"?`)) deleteGuest(guest.id) }}
-                    title="Eliminar"
-                  >🗑️</button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <ExcelImport />
-      <FamilySection />
-    </>
+    </div>
   )
 }
