@@ -196,8 +196,8 @@ function DoorShape({ door, roomBg, isSelected, onMouseDown }) {
 }
 
 // ─── Table component ──────────────────────────────────────────
-function TableShape({ table, guests, families, isSelected, movingGuestId, hasSelection,
-  onMouseDown, onClick, onSeatClick }) {
+function TableShape({ table, guests, families, isSelected, hasSelection, guestDragId,
+  onMouseDown, onClick, onSeatMouseDown, onSeatClick }) {
   const sz = getTableSize(table)
   const seats = getSeatPositions(table)
   const tableGuests = guests.filter(g => g.tableId === table.id)
@@ -209,45 +209,55 @@ function TableShape({ table, guests, families, isSelected, movingGuestId, hasSel
     return f?.color || '#94A3B8'
   }
 
-  const isTarget = movingGuestId && !tableGuests.some(g => g.id === movingGuestId)
-
-  const tableStroke = isTarget ? '#22C55E'
-    : isSelected ? '#C9956C'
-    : table.isSpecial ? '#C9956C'
-    : '#E5E7EB'
+  const tableStroke = isSelected ? '#C9956C' : table.isSpecial ? '#C9956C' : '#E5E7EB'
   const tableFill = table.isSpecial ? '#FFFBF5' : '#FFFFFF'
-  const sw = (isSelected || isTarget) ? 2.5 : 1.5
+  const sw = isSelected ? 2.5 : 1.5
 
   return (
     <g transform={`translate(${table.x},${table.y}) rotate(${table.rotation || 0})`}>
-      {/* Assign-mode ring (when sidebar guests are selected) */}
-      {hasSelection && !movingGuestId && (sz.type === 'ellipse'
+      {/* Assign-mode ring */}
+      {hasSelection && !guestDragId && (sz.type === 'ellipse'
         ? <ellipse rx={sz.rx+14} ry={sz.ry+14} fill="none"
             stroke="#C9956C" strokeWidth={1.5} strokeDasharray="5 3" opacity={0.45} pointerEvents="none" />
         : <rect x={-sz.w/2-14} y={-sz.h/2-14} width={sz.w+28} height={sz.h+28}
             rx={14} fill="none" stroke="#C9956C" strokeWidth={1.5} strokeDasharray="5 3" opacity={0.45} pointerEvents="none" />
       )}
 
-      {/* Drop target overlay */}
-      {isTarget && (sz.type === 'ellipse'
-        ? <ellipse rx={sz.rx} ry={sz.ry} fill="rgba(34,197,94,0.08)" pointerEvents="none" />
-        : <rect x={-sz.w/2} y={-sz.h/2} width={sz.w} height={sz.h} rx={8} fill="rgba(34,197,94,0.08)" pointerEvents="none" />
+      {/* Drop target highlight when dragging a guest */}
+      {guestDragId && (sz.type === 'ellipse'
+        ? <ellipse rx={sz.rx} ry={sz.ry} fill="rgba(34,197,94,0.07)" pointerEvents="none" />
+        : <rect x={-sz.w/2} y={-sz.h/2} width={sz.w} height={sz.h} rx={8} fill="rgba(34,197,94,0.07)" pointerEvents="none" />
       )}
 
       {/* Seats */}
       {seats.map((seat, i) => {
         const g = seatedArr[i]
-        const isMovingThis = g && g.id === movingGuestId
+        const isBeingDragged = g && g.id === guestDragId
         const fColor = g?.familyId ? getFamilyColor(g.familyId) : '#C9956C'
+        const canAssign = !g && hasSelection && !guestDragId
 
         return (
           <g key={i} transform={`translate(${seat.cx},${seat.cy})`}
-            style={{ cursor: g ? 'pointer' : 'default' }}
-            onClick={e => { e.stopPropagation(); onSeatClick(g, i) }}>
-            {g ? (
+            style={{ cursor: g && !isBeingDragged ? 'grab' : canAssign ? 'pointer' : 'default' }}
+            onMouseDown={e => {
+              if (g && !isBeingDragged) {
+                e.stopPropagation()
+                e.preventDefault()
+                onSeatMouseDown(g, i, fColor, e)
+              }
+            }}
+            onClick={e => {
+              e.stopPropagation()
+              if (!g) onSeatClick(null, i)
+            }}>
+            {isBeingDragged ? (
+              // Ghost outline where the dragged guest came from
+              <circle r={SEAT_R} fill="none" stroke={fColor}
+                strokeWidth={1.5} strokeDasharray="4 2" opacity={0.5} />
+            ) : g ? (
               <>
-                <circle r={SEAT_R} fill={isMovingThis ? '#F59E0B' : fColor}
-                  stroke={isMovingThis ? '#D97706' : 'rgba(255,255,255,0.5)'} strokeWidth={1.5} />
+                <circle r={SEAT_R} fill={fColor}
+                  stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} />
                 <text textAnchor="middle" dominantBaseline="middle"
                   fontSize={8.5} fill="white" fontWeight="700"
                   fontFamily="Inter,sans-serif" pointerEvents="none">
@@ -256,17 +266,17 @@ function TableShape({ table, guests, families, isSelected, movingGuestId, hasSel
               </>
             ) : (
               <>
-                <circle r={SEAT_R} fill="white" stroke="#D1D5DB"
-                  strokeWidth={1.5} strokeDasharray="3 2" />
+                <circle r={SEAT_R} fill="white" stroke={canAssign ? '#C9956C' : '#D1D5DB'}
+                  strokeWidth={canAssign ? 2 : 1.5} strokeDasharray="3 2" />
                 <text textAnchor="middle" dominantBaseline="middle"
-                  fontSize={11} fill="#D1D5DB" pointerEvents="none">+</text>
+                  fontSize={11} fill={canAssign ? '#C9956C' : '#D1D5DB'} pointerEvents="none">+</text>
               </>
             )}
           </g>
         )
       })}
 
-      {/* Table body (drawn on top of seats for z-order) */}
+      {/* Table body */}
       {sz.type === 'ellipse'
         ? <ellipse rx={sz.rx} ry={sz.ry} fill={tableFill} stroke={tableStroke} strokeWidth={sw}
             style={{ cursor: 'grab', filter: isSelected ? 'drop-shadow(0 4px 12px rgba(201,149,108,0.3))' : 'drop-shadow(0 3px 8px rgba(0,0,0,0.1))' }}
@@ -308,7 +318,6 @@ function TableShape({ table, guests, families, isSelected, movingGuestId, hasSel
 function DecoShape({ deco, isSelected, onMouseDown }) {
   const { w, h } = DECO_SIZE[deco.type] || { w: 80, h: 60 }
   const hh = h / 2
-
   return (
     <g transform={`translate(${deco.x},${deco.y}) rotate(${deco.rotation || 0})`}
       style={{ cursor: 'grab' }} onMouseDown={onMouseDown}>
@@ -329,26 +338,55 @@ export default function FloorPlan2D() {
   const svgRef = useRef(null)
   const {
     tables, decorations, guests, families, room,
-    moveTable, moveDecoration, updateTable, updateDecoration, updateDoor, deleteDecoration,
-    assignGuestToTable, assignGuestToSeat, addDecoration,
+    moveTable, moveDecoration, updateDoor, deleteDecoration,
+    assignGuestToSeat, addDecoration,
     setSelectedTable, bulkAssignToTable, clearSelection, ui
   } = useWeddingStore()
 
   const selectedGuestIds = ui.selectedGuestIds
   const selectedTableId  = ui.selectedTableId
 
-  const [drag, setDrag]               = useState(null)
-  const [movingGuestId, setMovingGuestId] = useState(null)
-  const [selectedDecoId, setSelectedDecoId] = useState(null)
-  const [showDecos, setShowDecos]     = useState(false)
-  const [zoom, setZoom]               = useState(1)
+  // Table/deco/door drag state
+  const [drag, setDrag] = useState(null)
 
-  // ESC cancels move
+  // Guest drag-and-drop state (for rendering the ghost)
+  const [guestDrag, _setGuestDrag] = useState(null)
+  // Refs for stable event handlers (avoid stale closure issues)
+  const guestDragRef = useRef(null)
+  const tablesRef    = useRef(tables)
+  const svgRefStable = useRef(svgRef)
+
+  // Keep refs in sync with latest values
+  useEffect(() => { tablesRef.current = tables }, [tables])
+  useEffect(() => { svgRefStable.current = svgRef }, [])
+
+  // Stable ref to assignGuestToSeat (changes identity on re-render)
+  const assignRef = useRef(assignGuestToSeat)
+  useEffect(() => { assignRef.current = assignGuestToSeat }, [assignGuestToSeat])
+
+  const [ghostPos, setGhostPos] = useState(null)
+  const [selectedDecoId, setSelectedDecoId] = useState(null)
+  const [showDecos, setShowDecos] = useState(false)
+  const [zoom, setZoom] = useState(1)
+
+  const startGuestDrag = useCallback((val) => {
+    guestDragRef.current = val
+    _setGuestDrag(val)
+    setGhostPos({ x: val.svgX, y: val.svgY })
+  }, [])
+
+  const endGuestDrag = useCallback(() => {
+    guestDragRef.current = null
+    _setGuestDrag(null)
+    setGhostPos(null)
+  }, [])
+
+  // ESC cancels
   useEffect(() => {
-    const fn = (e) => { if (e.key === 'Escape') { setMovingGuestId(null); setShowDecos(false) } }
+    const fn = (e) => { if (e.key === 'Escape') { endGuestDrag(); setShowDecos(false) } }
     window.addEventListener('keydown', fn)
     return () => window.removeEventListener('keydown', fn)
-  }, [])
+  }, [endGuestDrag])
 
   const toSVG = useCallback((e) => {
     const svg = svgRef.current
@@ -384,36 +422,78 @@ export default function FloorPlan2D() {
     }
   }, [drag, room, moveTable, moveDecoration, updateDoor, toSVG])
 
-  const handleMouseUp = useCallback(() => setDrag(null), [])
+  // Track ghost position during guest drag (window-level so it works outside SVG)
+  const isGuestDragging = !!guestDrag
+  useEffect(() => {
+    if (!isGuestDragging) return
+    const fn = (e) => {
+      const svg = svgRef.current
+      if (!svg) return
+      const pt = svg.createSVGPoint()
+      pt.x = e.clientX; pt.y = e.clientY
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse())
+      setGhostPos({ x: p.x, y: p.y })
+    }
+    window.addEventListener('mousemove', fn)
+    return () => window.removeEventListener('mousemove', fn)
+  }, [isGuestDragging])
+
+  // Stable mouseup handler using refs to avoid stale closure
+  const handleMouseUp = useCallback((e) => {
+    if (guestDragRef.current) {
+      const svg = svgRef.current
+      if (svg) {
+        const pt = svg.createSVGPoint()
+        pt.x = e.clientX; pt.y = e.clientY
+        const p = pt.matrixTransform(svg.getScreenCTM().inverse())
+        const { x, y } = p
+
+        // Find nearest seat within threshold
+        let best = null
+        let bestDist = SEAT_R * 1.8
+
+        tablesRef.current.forEach(table => {
+          const seats = getSeatPositions(table)
+          seats.forEach((seat, i) => {
+            const sx = table.x + seat.cx
+            const sy = table.y + seat.cy
+            const dist = Math.hypot(x - sx, y - sy)
+            if (dist < bestDist) {
+              bestDist = dist
+              best = { tableId: table.id, seatIndex: i }
+            }
+          })
+        })
+
+        if (best) {
+          assignRef.current(guestDragRef.current.guestId, best.tableId, best.seatIndex)
+        }
+      }
+      guestDragRef.current = null
+      _setGuestDrag(null)
+      setGhostPos(null)
+      return
+    }
+    setDrag(null)
+  }, [])
+
   useEffect(() => {
     window.addEventListener('mouseup', handleMouseUp)
     return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [handleMouseUp])
 
   const handleSeatClick = useCallback((guest, seatIndex, tableId) => {
-    if (movingGuestId) {
-      if (guest?.id === movingGuestId) {
-        setMovingGuestId(null)
-      } else {
-        assignGuestToSeat(movingGuestId, tableId, seatIndex)
-        setMovingGuestId(null)
-      }
-    } else if (guest) {
-      setMovingGuestId(guest.id)
+    // Assign first selected guest to empty seat
+    if (!guest && selectedGuestIds.length > 0) {
+      assignRef.current(selectedGuestIds[0], tableId, seatIndex)
     }
-  }, [movingGuestId, assignGuestToSeat])
+  }, [selectedGuestIds])
 
   const handleTableClick = useCallback((e, table) => {
     e.stopPropagation()
     setShowDecos(false)
 
-    if (movingGuestId) {
-      const occupied = guests.filter(g => g.tableId === table.id)
-      if (occupied.length < table.capacity) {
-        assignGuestToTable(movingGuestId, table.id)
-        setMovingGuestId(null)
-      }
-    } else if (selectedGuestIds.length > 0) {
+    if (selectedGuestIds.length > 0) {
       bulkAssignToTable(selectedGuestIds, table.id)
       clearSelection()
       setSelectedTable(table.id)
@@ -421,7 +501,7 @@ export default function FloorPlan2D() {
       setSelectedTable(table.id)
       setSelectedDecoId(null)
     }
-  }, [movingGuestId, selectedGuestIds, guests, assignGuestToTable, bulkAssignToTable, clearSelection, setSelectedTable])
+  }, [selectedGuestIds, bulkAssignToTable, clearSelection, setSelectedTable])
 
   // Grid
   const gridLines = []
@@ -430,7 +510,6 @@ export default function FloorPlan2D() {
   for (let gy = 50; gy < room.height; gy += 50)
     gridLines.push(<line key={`h${gy}`} x1={0} y1={gy} x2={room.width} y2={gy} stroke="rgba(0,0,0,0.06)" strokeWidth={0.5} />)
 
-  const movingGuest = movingGuestId ? guests.find(g => g.id === movingGuestId) : null
   const vw = room.width, vh = room.height
 
   return (
@@ -442,8 +521,7 @@ export default function FloorPlan2D() {
           🎨 Decoración
         </button>
         <div className="tb-div" />
-        <button className="tb-btn" title="Ajustar vista"
-          onClick={() => setZoom(1)}>
+        <button className="tb-btn" title="Ajustar vista" onClick={() => setZoom(1)}>
           ⊡ Ajustar
         </button>
       </div>
@@ -462,9 +540,16 @@ export default function FloorPlan2D() {
       )}
 
       {/* Assign mode hint */}
-      {selectedGuestIds.length > 0 && !movingGuestId && (
+      {selectedGuestIds.length > 0 && !guestDrag && (
         <div className="assign-hint">
           {selectedGuestIds.length} invitado{selectedGuestIds.length !== 1 ? 's' : ''} seleccionado{selectedGuestIds.length !== 1 ? 's' : ''} · Clic en una mesa para asignar
+        </div>
+      )}
+
+      {/* Guest drag hint */}
+      {guestDrag && (
+        <div className="assign-hint" style={{ background: 'rgba(34,197,94,0.1)', borderColor: '#22C55E', color: '#16A34A' }}>
+          Arrastrando: <strong>{guestDrag.name}</strong> · Suelta en un asiento
         </div>
       )}
 
@@ -478,11 +563,10 @@ export default function FloorPlan2D() {
         onClick={(e) => {
           if (e.target === svgRef.current || e.target.dataset.room) {
             setSelectedTable(null); setSelectedDecoId(null)
-            if (movingGuestId) setMovingGuestId(null)
             setShowDecos(false)
           }
         }}
-        style={{ userSelect: 'none', cursor: drag ? 'grabbing' : movingGuestId ? 'crosshair' : 'default' }}
+        style={{ userSelect: 'none', cursor: drag ? 'grabbing' : guestDrag ? 'grabbing' : 'default' }}
       >
         {/* Room floor */}
         <rect x={0} y={0} width={vw} height={vh} fill={room.background} data-room="true" />
@@ -531,29 +615,43 @@ export default function FloorPlan2D() {
           <TableShape key={table.id}
             table={table} guests={guests} families={families}
             isSelected={table.id === selectedTableId}
-            movingGuestId={movingGuestId}
             hasSelection={selectedGuestIds.length > 0}
+            guestDragId={guestDrag?.guestId}
             onMouseDown={e => {
-              if (movingGuestId) return
+              if (guestDrag) return
               e.stopPropagation(); e.preventDefault()
               setSelectedDecoId(null)
               const pos = toSVG(e)
               setDrag({ type: 'table', id: table.id, offX: pos.x - table.x, offY: pos.y - table.y })
             }}
             onClick={e => handleTableClick(e, table)}
+            onSeatMouseDown={(guest, seatIndex, familyColor, e) => {
+              const { x, y } = toSVG(e)
+              startGuestDrag({
+                guestId: guest.id,
+                name: guest.name,
+                familyColor,
+                svgX: x,
+                svgY: y,
+              })
+            }}
             onSeatClick={(guest, idx) => handleSeatClick(guest, idx, table.id)}
           />
         ))}
-      </svg>
 
-      {/* Moving guest bar */}
-      {movingGuest && (
-        <div className="moving-bar">
-          <span>Moviendo: <strong>{movingGuest.name}</strong></span>
-          <span style={{ opacity: 0.75, fontSize: 12 }}>Clic en un asiento · ESC para cancelar</span>
-          <button className="moving-bar-cancel" onClick={() => setMovingGuestId(null)}>✕</button>
-        </div>
-      )}
+        {/* Dragging guest ghost circle */}
+        {guestDrag && ghostPos && (
+          <g transform={`translate(${ghostPos.x},${ghostPos.y})`} pointerEvents="none"
+            style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.35))' }}>
+            <circle r={SEAT_R + 2} fill={guestDrag.familyColor} stroke="white" strokeWidth={2.5} opacity={0.92} />
+            <text textAnchor="middle" dominantBaseline="middle"
+              fontSize={8.5} fill="white" fontWeight="700"
+              fontFamily="Inter,sans-serif">
+              {shortName(guestDrag.name)}
+            </text>
+          </g>
+        )}
+      </svg>
 
       {/* Zoom controls */}
       <div className="zoom-ctrls">

@@ -109,6 +109,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   overflow: hidden;
   min-height: 0;
 }
+.app-body.fullscreen {
+  grid-template-columns: 1fr;
+}
 
 /* ─── Left Panel (dark) ──────────────────────────────────────── */
 .panel-left {
@@ -183,6 +186,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .fam-header:hover { background: rgba(255,255,255,0.04); }
 .fam-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .fam-name { font-size: 12px; font-weight: 600; color: var(--ton-2); flex: 1; }
+.fam-name-input {
+  flex: 1; background: var(--dark-3); border: 1px solid var(--gold);
+  color: var(--ton-1); border-radius: var(--r-xs); font-size: 12px; font-weight: 600;
+  padding: 1px 6px; outline: none; min-width: 0;
+}
 .fam-cnt { font-size: 11px; color: var(--ton-3); }
 .sel-all {
   font-size: 10px; font-weight: 700; color: var(--gold);
@@ -190,6 +198,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   padding: 1px 7px; border-radius: var(--r-xs); transition: background var(--tr);
 }
 .sel-all:hover { background: var(--gold-l); }
+.fam-act-btn {
+  width: 18px; height: 18px; border-radius: var(--r-xs);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--ton-3); opacity: 0;
+  transition: all var(--tr); flex-shrink: 0;
+}
+.fam-header:hover .fam-act-btn { opacity: 1; }
+.fam-act-btn:hover { background: rgba(255,255,255,0.1); color: var(--ton-1); }
+.fam-del-btn:hover { background: rgba(239,68,68,0.2) !important; color: #f87171 !important; }
 
 /* Guest item */
 .guest-item {
@@ -200,6 +217,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .guest-item:hover { background: rgba(255,255,255,0.05); }
 .guest-item.sel { background: var(--gold-l); }
 .guest-item.sel .g-name { color: var(--gold); }
+.g-del {
+  width: 18px; height: 18px; border-radius: var(--r-xs);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--ton-3);
+  opacity: 0; transition: all var(--tr); flex-shrink: 0;
+  line-height: 1;
+}
+.guest-item:hover .g-del { opacity: 1; }
+.g-del:hover { background: rgba(239,68,68,0.2); color: #f87171; opacity: 1; }
 .g-check {
   width: 15px; height: 15px; border-radius: var(--r-xs);
   border: 1.5px solid var(--bon); background: var(--dark-2);
@@ -594,6 +620,18 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .saved-room-info { flex: 1; min-width: 0; }
 .saved-room-name { font-size: 13px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .saved-room-date { font-size: 11px; color: var(--text-3); }
+
+/* ─── 3D View ────────────────────────────────────────────────── */
+.view-3d-container { width: 100%; height: 100%; position: relative; overflow: hidden; }
+.view-3d-hint {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.35); backdrop-filter: blur(4px);
+  color: rgba(255,255,255,0.75); font-size: 11px;
+  padding: 5px 14px; border-radius: var(--r-f); pointer-events: none; white-space: nowrap;
+}
+
+/* List view — no cursor on header since it's not collapsible */
+.tc-header { cursor: default; }
 
 /* ─── Scrollbar global ───────────────────────────────────────── */
 * { scrollbar-width: thin; scrollbar-color: var(--bord-2) transparent; }

@@ -17,22 +17,26 @@ function findCol(headers, keys) {
 }
 
 export default function GuestPanel() {
-  const guests              = useWeddingStore(s => s.guests)
-  const families            = useWeddingStore(s => s.families)
-  const tables              = useWeddingStore(s => s.tables)
-  const selectedGuestIds    = useWeddingStore(s => s.ui.selectedGuestIds)
+  const guests               = useWeddingStore(s => s.guests)
+  const families             = useWeddingStore(s => s.families)
+  const tables               = useWeddingStore(s => s.tables)
+  const selectedGuestIds     = useWeddingStore(s => s.ui.selectedGuestIds)
   const toggleGuestSelection = useWeddingStore(s => s.toggleGuestSelection)
-  const selectFamily        = useWeddingStore(s => s.selectFamily)
-  const clearSelection      = useWeddingStore(s => s.clearSelection)
-  const addGuest            = useWeddingStore(s => s.addGuest)
-  const addFamily           = useWeddingStore(s => s.addFamily)
-  const bulkAddGuests       = useWeddingStore(s => s.bulkAddGuests)
-  const deleteGuest         = useWeddingStore(s => s.deleteGuest)
+  const selectFamily         = useWeddingStore(s => s.selectFamily)
+  const clearSelection       = useWeddingStore(s => s.clearSelection)
+  const addGuest             = useWeddingStore(s => s.addGuest)
+  const addFamily            = useWeddingStore(s => s.addFamily)
+  const updateFamily         = useWeddingStore(s => s.updateFamily)
+  const deleteFamily         = useWeddingStore(s => s.deleteFamily)
+  const deleteGuest          = useWeddingStore(s => s.deleteGuest)
+  const bulkAddGuests        = useWeddingStore(s => s.bulkAddGuests)
 
-  const [search, setSearch]         = useState('')
-  const [showImport, setShowImport] = useState(false)
-  const [showAdd, setShowAdd]       = useState(false)
-  const [addForm, setAddForm]       = useState({ name: '', familyName: '', dietary: '', notes: '' })
+  const [search, setSearch]             = useState('')
+  const [showImport, setShowImport]     = useState(false)
+  const [showAdd, setShowAdd]           = useState(false)
+  const [addForm, setAddForm]           = useState({ name: '', familyName: '', dietary: '', notes: '' })
+  const [editingFamilyId, setEditingFamilyId] = useState(null)
+  const [editFamilyName, setEditFamilyName]   = useState('')
 
   const tableMap = useMemo(() => {
     const m = {}
@@ -46,11 +50,9 @@ export default function GuestPanel() {
     return guests.filter(g => g.name.toLowerCase().includes(q))
   }, [guests, search])
 
-  // Group all guests by family
   const familyGroups = useMemo(() => {
     const groups = []
     const seen = new Set()
-
     families.forEach(f => {
       const fGuests = filtered.filter(g => g.familyId === f.id)
       if (fGuests.length > 0) {
@@ -58,10 +60,8 @@ export default function GuestPanel() {
         fGuests.forEach(g => seen.add(g.id))
       }
     })
-
     const noFamily = filtered.filter(g => !g.familyId && !seen.has(g.id))
     if (noFamily.length > 0) groups.push({ family: null, guests: noFamily })
-
     return groups
   }, [filtered, families])
 
@@ -84,6 +84,26 @@ export default function GuestPanel() {
     addGuest({ name: addForm.name.trim(), familyId, dietary: addForm.dietary, notes: addForm.notes })
     setAddForm({ name: '', familyName: '', dietary: '', notes: '' })
     setShowAdd(false)
+  }
+
+  const startEditFamily = (e, family) => {
+    e.stopPropagation()
+    setEditingFamilyId(family.id)
+    setEditFamilyName(family.name)
+  }
+
+  const saveEditFamily = (familyId) => {
+    const name = editFamilyName.trim()
+    if (name) updateFamily(familyId, { name })
+    setEditingFamilyId(null)
+  }
+
+  const handleDeleteFamily = (e, family, fGuests) => {
+    e.stopPropagation()
+    const msg = fGuests.length > 0
+      ? `¿Eliminar familia "${family.name}" y desasignar sus ${fGuests.length} miembro(s)?`
+      : `¿Eliminar familia "${family.name}"?`
+    if (confirm(msg)) deleteFamily(family.id)
   }
 
   return (
@@ -157,24 +177,46 @@ export default function GuestPanel() {
 
         {familyGroups.map(({ family, guests: fGuests }) => {
           const allSelected = fGuests.every(g => selectedGuestIds.includes(g.id))
-          const someSelected = fGuests.some(g => selectedGuestIds.includes(g.id))
+          const isEditing = family && editingFamilyId === family.id
 
           return (
             <div key={family?.id || '__none__'} className="fam-section">
               {/* Family header */}
-              <div className="fam-header" onClick={() => family && selectFamily(family.id)}>
+              <div className="fam-header" onClick={() => family && !isEditing && selectFamily(family.id)}>
                 {family
                   ? <div className="fam-dot" style={{ background: family.color }} />
                   : <div className="fam-dot" style={{ background: '#94A3B8' }} />}
-                <span className="fam-name">{family ? family.name : 'Sin familia'}</span>
+
+                {isEditing ? (
+                  <input
+                    className="fam-name-input"
+                    value={editFamilyName}
+                    autoFocus
+                    onChange={e => setEditFamilyName(e.target.value)}
+                    onBlur={() => saveEditFamily(family.id)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveEditFamily(family.id)
+                      if (e.key === 'Escape') setEditingFamilyId(null)
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="fam-name">{family ? family.name : 'Sin familia'}</span>
+                )}
+
                 <span className="fam-cnt">{fGuests.length}</span>
-                {family && (
-                  <button
-                    className="sel-all"
-                    onClick={e => { e.stopPropagation(); selectFamily(family.id) }}
-                  >
-                    {allSelected ? 'Desel.' : someSelected ? 'Todos' : 'Todos'}
-                  </button>
+
+                {family && !isEditing && (
+                  <>
+                    <button className="sel-all"
+                      onClick={e => { e.stopPropagation(); selectFamily(family.id) }}>
+                      {allSelected ? 'Desel.' : 'Todos'}
+                    </button>
+                    <button className="fam-act-btn" title="Renombrar familia"
+                      onClick={e => startEditFamily(e, family)}>✏️</button>
+                    <button className="fam-act-btn fam-del-btn" title="Eliminar familia"
+                      onClick={e => handleDeleteFamily(e, family, fGuests)}>×</button>
+                  </>
                 )}
               </div>
 
@@ -224,6 +266,11 @@ function GuestItem({ guest, selected, tableLabel, onClick, onDelete }) {
       <span className={`g-table${!tableLabel ? ' no-table' : ''}`} title={tableLabel || 'Sin mesa'}>
         {tableLabel || '—'}
       </span>
+      <button
+        className="g-del"
+        title="Eliminar invitado"
+        onClick={e => { e.stopPropagation(); onDelete() }}
+      >×</button>
     </div>
   )
 }

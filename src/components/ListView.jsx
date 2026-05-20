@@ -1,14 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import useWeddingStore from '../store/useWeddingStore.js'
 
-const SHAPE_LABELS = { round: 'Redonda', rect: 'Rectangular', oval: 'Ovalada', square: 'Cuadrada' }
-const SHAPE_ICONS  = { round: '⭕', rect: '⬛', oval: '🥚', square: '🟥' }
+const SHAPE_ICONS = { round: '⭕', rect: '⬛', oval: '🥚', square: '🟥' }
 
 export default function ListView() {
   const tables   = useWeddingStore(s => s.tables)
   const guests   = useWeddingStore(s => s.guests)
   const families = useWeddingStore(s => s.families)
-  const [expanded, setExpanded] = useState({})
 
   const totalGuests = guests.length
   const assigned    = guests.filter(g => g.tableId).length
@@ -22,10 +20,7 @@ export default function ListView() {
   }, [tables, guests])
 
   const getFamilyColor = (fid) => families.find(f => f.id === fid)?.color || '#9CA3AF'
-  const getFamilyName  = (fid) => families.find(f => f.id === fid)?.name || '—'
-
   const noTableGuests = guests.filter(g => !g.tableId)
-  const toggle = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }))
 
   return (
     <div className="list-view">
@@ -53,40 +48,38 @@ export default function ListView() {
       <div className="table-cards">
         {tables.map(table => {
           const tGuests = guestsByTable[table.id] || []
-          const isOpen = expanded[table.id]
           const pct = Math.min(100, (tGuests.length / table.capacity) * 100)
-
           return (
             <div key={table.id} className="table-card">
-              <div className="tc-header" onClick={() => toggle(table.id)}>
+              <div className="tc-header">
                 <span>{SHAPE_ICONS[table.shape]}</span>
                 <span className="tc-name">{table.name}</span>
                 <span className="tc-meta">{tGuests.length}/{table.capacity}</span>
-                <span style={{ color: '#9CA3AF', fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+                {table.isSpecial && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#C9956C' }}>★ {table.specialType || 'Especial'}</span>
+                )}
               </div>
               <div className="tc-bar">
                 <div className={`tc-fill${pct >= 100 ? ' full' : pct >= 80 ? ' near' : ''}`}
                   style={{ width: `${pct}%` }} />
               </div>
-              {isOpen && (
-                <div className="tc-guests">
-                  {tGuests.length === 0 ? (
-                    <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Sin invitados</span>
-                  ) : (
-                    tGuests.map(g => (
-                      <div key={g.id} className="guest-tag">
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: getFamilyColor(g.familyId), flexShrink: 0 }} />
-                        {g.name}
-                        {g.dietary && (
-                          <span style={{ fontSize: 10, color: '#C9956C', borderLeft: '1px solid #E5E7EB', paddingLeft: 5 }}>
-                            {g.dietary}
-                          </span>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
+              <div className="tc-guests">
+                {tGuests.length === 0 ? (
+                  <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Sin invitados asignados</span>
+                ) : (
+                  tGuests.map(g => (
+                    <div key={g.id} className="guest-tag">
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: getFamilyColor(g.familyId), flexShrink: 0 }} />
+                      {g.name}
+                      {g.dietary && (
+                        <span style={{ fontSize: 10, color: '#C9956C', borderLeft: '1px solid #E5E7EB', paddingLeft: 5 }}>
+                          {g.dietary}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )
         })}

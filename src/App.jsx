@@ -16,6 +16,7 @@ export default function App() {
 
   const assigned = guests.filter(g => g.tableId).length
   const unassigned = guests.length - assigned
+  const is3D = view === '3d'
 
   return (
     <div className="app">
@@ -60,18 +61,22 @@ export default function App() {
         </div>
       </header>
 
-      <div className="app-body">
-        <aside className="panel-left">
-          <GuestPanel />
-        </aside>
+      <div className={`app-body${is3D ? ' fullscreen' : ''}`}>
+        {!is3D && (
+          <aside className="panel-left">
+            <GuestPanel />
+          </aside>
+        )}
         <main className="canvas-area">
           {view === '2d' && <FloorPlan2D />}
           {view === '3d' && <FloorPlan3D />}
           {view === 'list' && <ListView />}
         </main>
-        <aside className="panel-right">
-          <TableDetail />
-        </aside>
+        {!is3D && (
+          <aside className="panel-right">
+            <TableDetail />
+          </aside>
+        )}
       </div>
     </div>
   )
