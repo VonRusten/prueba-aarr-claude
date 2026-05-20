@@ -1,13 +1,14 @@
 import React, { useState } from 'react'
 import useWeddingStore from '../store/useWeddingStore.js'
 
+// Dimensions in meters — converted to pixels on apply using current scale
 const PRESETS = [
-  { name: 'Sala Grande', icon: '🏛️', width: 1600, height: 1000 },
-  { name: 'Sala Mediana', icon: '🏠', width: 1200, height: 800 },
-  { name: 'Jardín', icon: '🌳', width: 1400, height: 900 },
-  { name: 'Íntima', icon: '🕯️', width: 900, height: 700 },
-  { name: 'Palacio', icon: '✨', width: 2000, height: 1200 },
-  { name: 'Terraza', icon: '🌅', width: 1100, height: 750 },
+  { name: 'Sala Grande',  icon: '🏛️', wM: 40, hM: 25 },
+  { name: 'Sala Mediana', icon: '🏠', wM: 30, hM: 20 },
+  { name: 'Jardín',       icon: '🌳', wM: 35, hM: 22 },
+  { name: 'Íntima',       icon: '🕯️', wM: 22, hM: 17 },
+  { name: 'Palacio',      icon: '✨', wM: 50, hM: 30 },
+  { name: 'Terraza',      icon: '🌅', wM: 27, hM: 18 },
 ]
 
 export default function RoomSettings() {
@@ -43,20 +44,47 @@ export default function RoomSettings() {
       {/* Dimensions */}
       <div className="rs-section">
         <div className="rs-title">Dimensiones</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div>
-            <label style={lbl}>Ancho (px)</label>
-            <input className="fi" type="number" min="400" max="3000" step="50"
-              value={room.width}
-              onChange={e => updateRoom({ width: Math.max(400, parseInt(e.target.value) || 1200) })} />
-          </div>
-          <div>
-            <label style={lbl}>Alto (px)</label>
-            <input className="fi" type="number" min="300" max="2000" step="50"
-              value={room.height}
-              onChange={e => updateRoom({ height: Math.max(300, parseInt(e.target.value) || 800) })} />
-          </div>
-        </div>
+        {(() => {
+          const ppm = room.pixelsPerMeter || 40
+          const wM = +(room.width / ppm).toFixed(1)
+          const hM = +(room.height / ppm).toFixed(1)
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <label style={lbl}>Ancho (m)</label>
+                  <input className="fi" type="number" min="5" max="100" step="0.5"
+                    value={wM}
+                    onChange={e => {
+                      const m = Math.max(5, parseFloat(e.target.value) || 10)
+                      updateRoom({ width: Math.round(m * ppm) })
+                    }} />
+                </div>
+                <div>
+                  <label style={lbl}>Alto (m)</label>
+                  <input className="fi" type="number" min="3" max="80" step="0.5"
+                    value={hM}
+                    onChange={e => {
+                      const m = Math.max(3, parseFloat(e.target.value) || 8)
+                      updateRoom({ height: Math.round(m * ppm) })
+                    }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={lbl}>Escala (px por metro)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input className="fi" type="number" min="20" max="100" step="5"
+                    value={ppm}
+                    onChange={e => updateRoom({ pixelsPerMeter: Math.max(20, parseInt(e.target.value) || 40) })}
+                    style={{ maxWidth: 80 }} />
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                    Sala: {wM} × {hM} m
+                  </span>
+                </div>
+              </div>
+            </>
+          )
+        })()}
         <div>
           <label style={lbl}>Color de fondo</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -105,14 +133,18 @@ export default function RoomSettings() {
       <div className="rs-section">
         <div className="rs-title">Plantillas</div>
         <div className="preset-grid">
-          {PRESETS.map(p => (
-            <button key={p.name} className="preset-card"
-              onClick={() => applyPreset({ width: p.width, height: p.height })}
-              title={`${p.width}×${p.height}`}>
-              <span style={{ fontSize: 16 }}>{p.icon}</span>
-              <span>{p.name}</span>
-            </button>
-          ))}
+          {PRESETS.map(p => {
+            const ppm = room.pixelsPerMeter || 40
+            return (
+              <button key={p.name} className="preset-card"
+                onClick={() => applyPreset({ width: Math.round(p.wM * ppm), height: Math.round(p.hM * ppm) })}
+                title={`${p.wM} × ${p.hM} m`}>
+                <span style={{ fontSize: 16 }}>{p.icon}</span>
+                <span>{p.name}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-4)' }}>{p.wM}×{p.hM} m</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 

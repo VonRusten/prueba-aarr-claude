@@ -41,7 +41,7 @@ const useWeddingStore = create(
       tables: sampleTables,
       decorations: sampleDecorations,
       room: {
-        width: 1100, height: 750, name: 'Salón Principal', background: '#f5f0e8',
+        width: 1100, height: 750, pixelsPerMeter: 40, name: 'Salón Principal', background: '#f5f0e8',
         door: { x: 550, y: 747, rotation: 0, size: 90, label: 'Entrada' }
       },
       savedRooms: [],
