@@ -1,83 +1,57 @@
-import React from 'react'
-import useWeddingStore from './store/useWeddingStore.js'
-import GuestPanel from './components/GuestPanel.jsx'
-import TableDetail from './components/TableDetail.jsx'
-import FloorPlan2D from './components/FloorPlan2D.jsx'
-import FloorPlan3D from './components/FloorPlan3D.jsx'
-import ListView from './components/ListView.jsx'
+import { useState } from 'react'
+import { usePlatformStore } from './store/usePlatformStore'
+import Dashboard from './components/Dashboard'
+import IntakeChat from './components/IntakeChat'
+import SystemDetail from './components/SystemDetail'
+import { NIVELES_RIESGO } from './domain/constants'
 
 export default function App() {
-  const view = useWeddingStore(s => s.ui.view)
-  const setView = useWeddingStore(s => s.setView)
-  const guests = useWeddingStore(s => s.guests)
-  const tables = useWeddingStore(s => s.tables)
-  const room = useWeddingStore(s => s.room)
-  const updateRoom = useWeddingStore(s => s.updateRoom)
+  const sistemas = usePlatformStore((st) => st.sistemas)
+  const [vista, setVista] = useState({ tipo: 'dashboard' })
 
-  const assigned = guests.filter(g => g.tableId).length
-  const unassigned = guests.length - assigned
-  const is3D = view === '3d'
+  const abrirSistema = (id) => setVista({ tipo: 'sistema', id })
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="brand">
-          <span className="brand-icon">💍</span>
-          <h1>Seating Planner</h1>
-        </div>
-        <div className="hdr-div" />
-        <input
-          className="event-name-input"
-          value={room.name}
-          onChange={e => updateRoom({ name: e.target.value })}
-          placeholder="Nombre del evento..."
-        />
-        <div className="hdr-stats">
-          <div className="stat-pill">
-            <span>Invitados</span>
-            <strong>{guests.length}</strong>
+      <aside className="sidebar">
+        <div className="brand" onClick={() => setVista({ tipo: 'dashboard' })}>
+          <span className="brand-icon">⚖️</span>
+          <div>
+            <strong>AI Act-native</strong>
+            <small>Vibe coding regulado</small>
           </div>
-          <div className="stat-pill">
-            <span>Mesas</span>
-            <strong>{tables.length}</strong>
-          </div>
-          {unassigned > 0 && (
-            <div className="stat-pill warn">
-              <span>Sin mesa</span>
-              <strong>{unassigned}</strong>
-            </div>
-          )}
         </div>
-        <div className="view-tabs">
-          <button className={`view-tab${view === '2d' ? ' active' : ''}`} onClick={() => setView('2d')}>
-            Plano
+        <button className="btn btn-primary btn-block" onClick={() => setVista({ tipo: 'intake' })}>
+          ＋ Nuevo sistema de IA
+        </button>
+        <nav>
+          <button className={vista.tipo === 'dashboard' ? 'nav-item activo' : 'nav-item'} onClick={() => setVista({ tipo: 'dashboard' })}>
+            Panel de cumplimiento
           </button>
-          <button className={`view-tab${view === '3d' ? ' active' : ''}`} onClick={() => setView('3d')}>
-            3D
-          </button>
-          <button className={`view-tab${view === 'list' ? ' active' : ''}`} onClick={() => setView('list')}>
-            Lista
-          </button>
+        </nav>
+        <div className="sidebar-section">Sistemas registrados</div>
+        <div className="sidebar-list">
+          {sistemas.length === 0 && <p className="muted small pad">Aún no hay sistemas. Empieza con el intake conversacional.</p>}
+          {sistemas.map((s) => (
+            <button
+              key={s.id}
+              className={vista.tipo === 'sistema' && vista.id === s.id ? 'nav-item activo' : 'nav-item'}
+              onClick={() => abrirSistema(s.id)}
+            >
+              <span className={`dot dot-${NIVELES_RIESGO[s.clasificacion?.nivel]?.color || 'gris'}`} />
+              <span className="nav-label">{s.nombre || '(sin nombre)'}</span>
+            </button>
+          ))}
         </div>
-      </header>
-
-      <div className={`app-body${is3D ? ' fullscreen' : ''}`}>
-        {!is3D && (
-          <aside className="panel-left">
-            <GuestPanel />
-          </aside>
-        )}
-        <main className="canvas-area">
-          {view === '2d' && <FloorPlan2D />}
-          {view === '3d' && <FloorPlan3D />}
-          {view === 'list' && <ListView />}
-        </main>
-        {!is3D && (
-          <aside className="panel-right">
-            <TableDetail />
-          </aside>
-        )}
-      </div>
+        <footer className="sidebar-footer">
+          <small>Reglamento (UE) 2024/1689 · La creatividad ocurre en la experiencia; la confianza se garantiza en la capa de control.</small>
+        </footer>
+      </aside>
+      <main className="contenido">
+        {vista.tipo === 'dashboard' && <Dashboard onAbrir={abrirSistema} onNuevo={() => setVista({ tipo: 'intake' })} />}
+        {vista.tipo === 'intake' && <IntakeChat onTerminado={abrirSistema} onCancelar={() => setVista({ tipo: 'dashboard' })} />}
+        {vista.tipo === 'sistema' && <SystemDetail id={vista.id} onCerrar={() => setVista({ tipo: 'dashboard' })} />}
+      </main>
     </div>
   )
 }
